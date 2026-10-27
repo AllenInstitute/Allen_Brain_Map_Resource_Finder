@@ -236,7 +236,7 @@
         width: 78px;
         height: 78px;
         object-fit: contain;
-        background: var(--page);
+        background: #808080;
         border: 1px solid var(--page-2);
         flex: 0 0 78px;
       }
@@ -554,7 +554,7 @@
         help: "Learn or get help",
       };
       const FALLBACK =
-        "data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20120%20120%22%3E%3Crect%20width%3D%22120%22%20height%3D%22120%22%20fill%3D%22%23F3F0E8%22/%3E%3C/svg%3E";
+        "data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20120%20120%22%3E%3Crect%20width%3D%22120%22%20height%3D%22120%22%20fill%3D%22%23808080%22/%3E%3C/svg%3E";
       let resources = [];
       let active = "";
       const $ = (id) => document.getElementById(id);
@@ -575,6 +575,27 @@
           .split(";")
           .map((x) => x.trim())
           .filter(Boolean);
+
+      // Deduplicate display tags and remove compounds covered by simpler tags.
+      function displayKeywords(r) {
+        const key = x => x.trim().toLowerCase();
+        const species = [...new Map(r.species.map(x => [key(x), x])).values()];
+        const multiple = species.length > 1 || species.some(x => /^(multiple|multi)[ -]?species$/i.test(x));
+        const label = multiple ? "Multiple species" : species[0];
+        const speciesKeys = new Set(species.map(key));
+        if (multiple) ["mouse", "human", "rat", "macaque", "non-human primate", "multiple species", "multispecies"].forEach(x => speciesKeys.add(x));
+        const tags = [...new Map(split(r.tags).map(x => [key(x), x])).values()].filter(x => !speciesKeys.has(key(x)));
+        const words = x => (key(x).match(/[a-z0-9]+/g) || []).map(w => /^(developing|developmental|development)$/.test(w) ? "development" : w);
+        const concise = tags.filter((tag, i) => {
+          const tokens = words(tag);
+          const covered = new Set(species.flatMap(words));
+          tags.forEach((other, j) => {
+            if (j !== i && words(other).length < tokens.length) words(other).forEach(w => covered.add(w));
+          });
+          return !tokens.length || !tokens.every(w => covered.has(w));
+        });
+        return [...concise.slice(0, 2), ...(label ? [label] : [])];
+      }
 
       // Parse the external CSV, including quoted fields and embedded commas.
       function parseCSV(text) {
@@ -752,7 +773,7 @@
           shown
             .map(
               (r) =>
-                `<article class="card"><div class="card-top"><img class="icon" src="${esc(r.image)}" alt="" onerror="this.onerror=null;this.src='${FALLBACK}'"><div><div class="kind">${esc(r.type || "Resource")}/</div><h3>${esc(r.name)}</h3></div></div><p>${esc(r.description)}</p><div class="chips">${[...split(r.tags).slice(0, 2), ...r.species.slice(0, 1)].map((x) => `<span class="chip">${esc(x)}</span>`).join("")}</div><div class="actions"><a class="open" href="${esc(r.url)}" target="_blank" rel="noopener">open resource/</a><button class="details" data-name="${esc(r.name)}">details/</button></div></article>`,
+                `<article class="card"><div class="card-top"><img class="icon" src="${esc(r.image)}" alt="" onerror="this.onerror=null;this.src='${FALLBACK}'"><div><div class="kind">${esc(r.type || "Resource")}/</div><h3>${esc(r.name)}</h3></div></div><p>${esc(r.description)}</p><div class="chips">${displayKeywords(r).map((x) => `<span class="chip">${esc(x)}</span>`).join("")}</div><div class="actions"><a class="open" href="${esc(r.url)}" target="_blank" rel="noopener">open resource/</a><button class="details" data-name="${esc(r.name)}">details/</button></div></article>`,
             )
             .join("") ||
           '<div class="loading">No resources match the current filters.</div>';
